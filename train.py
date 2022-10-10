@@ -18,8 +18,18 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
+# Extra Tools
+from convert_diffusers_to_original_stable_diffusion import convert
+from prune import prune
+
 def parse_training_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
+    parser.add_argument(
+        "--output_name",
+        type=str,
+        required=True,
+        help="Name of the newly created model",
+    )
     parser.add_argument(
         "--model_path",
         type=str,
@@ -163,6 +173,21 @@ def parse_training_args(input_args=None):
         type=int,
         default=None,
         help="Generate an output for every n epochs",
+    )
+    parser.add_argument(
+        "--convert_to_ckpt",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--output_ckpt_path",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        default=False,
     )
 
     if input_args is not None:
@@ -501,16 +526,25 @@ def train(args):
 
         accelerator.wait_for_everyone()
 
+        # TODO move saving into function to reduce code duplication
         # Save a new checkpoint every n epochs
         if (args.save_each_epoch) and (epoch % args.save_each_epoch == 0) and (epoch != 0) and (epoch != args.num_train_epochs):
-            checkpoint_path = args.output_dir + "_epoch" + str(epoch)
-            print("Save new checkpoint epoch: " + str(epoch))
+            epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch)
             # I am COMPLETELY guessing at this. Hope this works.
             pipeline = StableDiffusionPipeline.from_pretrained(
                 args.model_path,
                 unet=accelerator.unwrap_model(unet)
             )
-            pipeline.save_pretrained(checkpoint_path)
+            print("Saving model epoch to: " + epoch_path)
+            pipeline.save_pretrained(epoch_path)
+
+            if args.convert_to_ckpt is not None:
+                ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch) + ".ckpt"
+                print("Convert to .ckpt: " + ckpt_path)
+                convert(epoch_path, ckpt_path)
+                if args.prune is not None:
+                    prune(ckpt_path, True)
+                
 
     # Create the pipeline using using the trained modules and save it.
     if accelerator.is_main_process:
@@ -518,7 +552,16 @@ def train(args):
             args.model_path,
             unet=accelerator.unwrap_model(unet)
         )
-        pipeline.save_pretrained(args.output_dir)
+        final_dir = args.output_dir + "/" + args.output_name
+        print("Saving model to: " + final_dir)
+        pipeline.save_pretrained(final_dir)
+
+        if args.convert_to_ckpt is not None:
+            ckpt_path = args.output_ckpt_path + "/" + args.output_name + ".ckpt"
+            print("Convert to .ckpt: " + ckpt_path)
+            convert(final_dir, ckpt_path)
+            if args.prune is not None:
+                prune(ckpt_path, True)
 
     accelerator.end_training()
 

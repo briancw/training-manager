@@ -44,3 +44,5 @@ LD_LIBRARY_PATH=/opt/cuda/targets/x86_64-linux/lib/
 - Based on [Victarry's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) Dreambooth implementations
 - Huggingface for [diffusers](https://github.com/huggingface/diffusers)
 - Memory and speed improvments from [ShivamShirao's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) repo
+- (Josh Achiam)[https://github.com/jachiam] for diffusers to ckpt script
+- (Harubaru)[https://github.com/harubaru] for pruning script

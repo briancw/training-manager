@@ -1,6 +1,7 @@
 jobs:
     run1:
         train_config:
+            output_name: test
             instance_prompt: "xyz person"
             class_prompt: "person"
             output_dir: /path-to-save-new-model

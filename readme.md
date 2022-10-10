@@ -1,5 +1,5 @@
 # Dreambooth Training Manager
-### Install
+## Install
 ```bash
 git clone https://github.com/briancw/training-manager
 cd training-manager
@@ -10,8 +10,19 @@ pip install -r requirements.txt
 pip install git+https://github.com/facebookresearch/xformers#egg=xformers
 ```
 
+## Running
+The script will use jobs.yml by default, or you can specify one with --config
+```
+source venv/bin/activate
+python manager.py --config my-job.yml
+```
+You can get all of the training configuration options with:
+```
+python train.py -h
+```
+
 ### Save epochs during training
-You can use the flag "--save_each_epoch=n" to save the model at every n epochs.
+Add "save_each_epoch: n" to your jobs yaml configuration to save out a model every n epochs.<br>
 
 ### Rare Token Generator
 Use the generate_tokens.py script to find a rare 3 character token to use in your instance prompt when training.<br>

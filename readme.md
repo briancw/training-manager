@@ -21,7 +21,7 @@ python generate_tokens.py --model_path /some/path/to/your/model
 ```
 
 ### Substantial memory reduction (Credit ShivamShirao)
-Using [Bitsandbytes](https://github.com/TimDettmers/bitsandbytes) amd [xformers](https://github.com/facebookresearch/xformers) will result in a substantial memory reduction. See [ShivamShrirao's repo](ttps://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) for more details.
+Using [Bitsandbytes](https://github.com/TimDettmers/bitsandbytes) amd [xformers](https://github.com/facebookresearch/xformers) will result in a substantial memory reduction. See [ShivamShrirao's repo](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) for more details.
 
 ### Arch Linux Bitsandbytes
 At least for me, when running on Arch, I need to manually specify LD_LIBRARY_PATH for bitsandbytes in my run script
@@ -30,6 +30,6 @@ LD_LIBRARY_PATH=/opt/cuda/targets/x86_64-linux/lib/
 ```
 
 ## Credits
-- Based on [Victarry's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) Dreambooth implementations.
+- Based on [Victarry's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) Dreambooth implementations
 - Huggingface for [diffusers](https://github.com/huggingface/diffusers)
-- Enhancents from [ShivamShirao's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) Dreambooth repo have been incorporated.
+- Memory and speed improvments from [ShivamShirao's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) repo

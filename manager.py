@@ -1,30 +1,42 @@
-import json
-from train import main, parse_args
+import yaml
+import argparse
+from pathlib import Path
+from train import train, parse_training_args
 
-arg_string = """{
-    "model_path": "/path/to/your/model",
-    "instance_data_dir": "/path/to/your/images",
-    "output_dir": "/path/to/output",
-    "gradient_accumulation_steps": "1",
-    "mixed_precision": "fp16",
-    "seed": "80085",
-    "instance_prompt": "xyz person",
-    "resolution": "512",
-    "train_batch_size": "1",
-    "learning_rate": "5e-6",
-    "lr_scheduler": "constant",
-    "lr_warmup_steps": "0",
-    "sample_batch_size": "4",
-    "num_train_epochs": "5",
-    "save_each_epoch": "1",
-    "use_8bit_adam": null
-}"""
+def parse_args():
+    parser = argparse.ArgumentParser(description="Dreambooth Training Manager")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="./jobs.yml",
+        help="Path to a config file with training options",
+    )
+    args = parser.parse_args()
+    return args
 
-input_args = []
-for key, value in json.loads(arg_string).items():
-    input_args.append("--" + key)
-    if value:
-        input_args.append(value)
+def run():
+    args = parse_args()
+    
+    if not Path(args.config).is_file():
+        print('Config file not found')
+        return
 
-args = parse_args(input_args)
-main(args)
+    # Get training configuration from the config file
+    with open(args.config, 'r') as config_file:
+        config = yaml.safe_load(config_file)
+
+        for job_name, job_config in config['jobs'].items():
+            # Parse config parameters into array for argparse compatability
+            train_config = job_config['train_config']
+            training_arg_array = []
+            for param_name, param_value in train_config.items():
+                training_arg_array.append("--" + param_name)
+                if param_value is not None:
+                    training_arg_array.append(str(param_value))
+
+            # Run training
+            training_args = parse_training_args(training_arg_array)
+            train(training_args)
+            
+if __name__ == "__main__":
+    run()

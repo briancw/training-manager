@@ -18,7 +18,7 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-def parse_args(input_args):
+def parse_training_args(input_args):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
         "--model_path",
@@ -288,7 +288,7 @@ class AverageMeter:
         self.count += n
         self.avg = self.sum / self.count
 
-def main(args):
+def train(args):
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
@@ -524,5 +524,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    main(args)
+    args = parse_training_args()
+    train(args)

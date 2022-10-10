@@ -1,0 +1,24 @@
+jobs:
+    run1:
+        train_config:
+            instance_prompt: "xyz person"
+            class_prompt: "person"
+            output_dir: /path-to-save-new-model
+            instance_data_dir: /path-to-your-training-images
+            class_data_dir: /path-to-your-class-images
+            num_class_images: 10
+            model_path: /path-to-your-model
+            gradient_accumulation_steps: 1
+            mixed_precision: fp16
+            seed: 80085
+            resolution: 512
+            train_batch_size: 1
+            learning_rate: 5e-6
+            lr_scheduler: constant
+            lr_warmup_steps: 0
+            sample_batch_size: 4
+            num_train_epochs: 5
+            save_each_epoch: 1
+            use_8bit_adam:
+            with_prior_preservation:
+            prior_loss_weight: 1

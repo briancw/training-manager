@@ -16,6 +16,10 @@ MODEL_PATH="$MODELS_BASE_PATH/$MODEL_NAME"
 TRAINING_PATH="$TRAINING_BASE_PATH/$TRAINING_IMAGES"
 OUTPUT_PATH="$MODELS_BASE_PATH/$OUTPUT_NAME"
 
+# Activate virtualenv
+source venv/bin/activate/
+
+# Train
 python train.py \
   --instance_prompt="$INSTANCE_PROMPT" \
   --model_path=$MODEL_PATH \

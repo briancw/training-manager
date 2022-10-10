@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# You may need to specify a path to "libcudart.so"
+# On arch linux uncomment the following line
+# export LD_LIBRARY_PATH=/opt/cuda/targets/x86_64-linux/lib/
+
 OUTPUT_NAME="name-of-the-new-model"
 INSTANCE_PROMPT="xyz person"
 MODEL_NAME="sd-v1-4"
@@ -27,7 +31,6 @@ python train.py \
   --output_dir=$OUTPUT_PATH \
   --seed=80085 \
   --resolution=512 \
-  --center_crop \
   --train_batch_size=1 \
   --mixed_precision="fp16" \
   --gradient_accumulation_steps=1 \

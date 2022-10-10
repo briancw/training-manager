@@ -18,7 +18,7 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-def parse_args():
+def parse_args(input_args):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
         "--model_path",
@@ -165,7 +165,11 @@ def parse_args():
         help="Generate an output for every n epochs",
     )
 
-    args = parser.parse_args()
+    if input_args is not None:
+        args = parser.parse_args(input_args)
+    else:
+        args = parser.parse_args()
+
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
@@ -260,7 +264,6 @@ class DreamBoothDataset(Dataset):
 
         return example
 
-
 class LatentsDataset(Dataset):
     def __init__(self, latents_cache, text_encoder_cache):
         self.latents_cache = latents_cache
@@ -271,7 +274,6 @@ class LatentsDataset(Dataset):
 
     def __getitem__(self, index):
         return self.latents_cache[index], self.text_encoder_cache[index]
-
 
 class AverageMeter:
     def __init__(self, name=None):
@@ -286,10 +288,7 @@ class AverageMeter:
         self.count += n
         self.avg = self.sum / self.count
 
-
-def main():
-    args = parse_args()
-
+def main(args):
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
@@ -525,4 +524,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)

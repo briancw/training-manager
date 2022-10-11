@@ -5,7 +5,7 @@
 # Does not convert optimizer state or any other thing.
 
 import argparse
-import os.path as osp
+import os
 import torch
 
 # =================#
@@ -188,13 +188,13 @@ def convert_text_enc_state_dict(text_enc_dict):
     return text_enc_dict
 
 
-def convert(input_path, output_path, do_half=False):
+def convert(input_path, output_path, do_half=False, remove_original=False):
     assert input_path is not None, "Must provide a model path!"
     assert output_path is not None, "Must provide a checkpoint path!"
 
-    unet_path = osp.join(input_path, "unet", "diffusion_pytorch_model.bin")
-    vae_path = osp.join(input_path, "vae", "diffusion_pytorch_model.bin")
-    text_enc_path = osp.join(input_path, "text_encoder", "pytorch_model.bin")
+    unet_path = os.path.join(input_path, "unet", "diffusion_pytorch_model.bin")
+    vae_path = os.path.join(input_path, "vae", "diffusion_pytorch_model.bin")
+    text_enc_path = os.path.join(input_path, "text_encoder", "pytorch_model.bin")
 
     # Convert the UNet model
     unet_state_dict = torch.load(unet_path, map_location="cpu")
@@ -217,6 +217,10 @@ def convert(input_path, output_path, do_half=False):
         state_dict = {k: v.half() for k, v in state_dict.items()}
     state_dict = {"state_dict": state_dict}
     torch.save(state_dict, output_path)
+
+    # Remove the original
+    if remove_original:
+        os.rmdir(input_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

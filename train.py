@@ -185,6 +185,12 @@ def parse_training_args(input_args=None):
         default=None,
     )
     parser.add_argument(
+        "--ckpt_only",
+        default=False,
+        type="store_true",
+        help="Delete diffusers models and only keep ckpt files"
+    )
+    parser.add_argument(
         "--prune",
         action="store_true",
         default=False,
@@ -553,13 +559,16 @@ def train(args):
             unet=accelerator.unwrap_model(unet)
         )
         final_dir = args.output_dir + "/" + args.output_name
+        if (args.save_each_epoch):
+            final_dir += "_epoch" + str(epoch)
+        
         print("Saving model to: " + final_dir)
         pipeline.save_pretrained(final_dir)
 
         if args.convert_to_ckpt is not None:
             ckpt_path = args.output_ckpt_path + "/" + args.output_name + ".ckpt"
             print("Convert to .ckpt: " + ckpt_path)
-            convert(final_dir, ckpt_path)
+            convert(final_dir, ckpt_path, False, args.ckpt_only)
             if args.prune is not None:
                 prune(ckpt_path, True)
 

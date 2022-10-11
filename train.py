@@ -541,9 +541,8 @@ def train(args):
         # TODO move saving into function to reduce code duplication
         # Save an output every n epochs, past the minimum, and skip on the final
         if (args.save_each_epoch):
-            if (epoch >= args.min_save_epoch) and (epoch % args.save_each_epoch == 0) and (epoch != args.num_train_epochs):
-                epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch)
-                # I am COMPLETELY guessing at this. Hope this works.
+            if ((epoch + 1) >= args.min_save_epoch) and ((epoch + 1) % args.save_each_epoch == 0) and ((epoch + 1) != args.num_train_epochs):
+                epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch + 1)
                 pipeline = StableDiffusionPipeline.from_pretrained(
                     args.model_path,
                     unet=accelerator.unwrap_model(unet)
@@ -552,7 +551,7 @@ def train(args):
                 pipeline.save_pretrained(epoch_path)
 
                 if args.convert_to_ckpt is not None:
-                    ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch) + ".ckpt"
+                    ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch + 1) + ".ckpt"
                     print("Convert to .ckpt: " + ckpt_path)
                     convert(epoch_path, ckpt_path, False, args.ckpt_only)
                     if args.prune is not None:
@@ -567,13 +566,16 @@ def train(args):
         )
         final_dir = args.output_dir + "/" + args.output_name
         if (args.save_each_epoch):
-            final_dir += "_epoch" + str(epoch)
+            final_dir += "_epoch" + str(epoch + 1)
         
         print("Saving model to: " + final_dir)
         pipeline.save_pretrained(final_dir)
 
         if args.convert_to_ckpt is not None:
             ckpt_path = args.output_ckpt_path + "/" + args.output_name + ".ckpt"
+            if (args.save_each_epoch):
+                ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch + 1) + ".ckpt"
+            
             print("Convert to .ckpt: " + ckpt_path)
             convert(final_dir, ckpt_path)
             if args.prune is not None:

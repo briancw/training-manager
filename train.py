@@ -193,7 +193,7 @@ def parse_training_args(input_args=None):
     parser.add_argument(
         "--ckpt_only",
         default=False,
-        type="store_true",
+        action="store_true",
         help="Delete diffusers models and only keep ckpt files"
     )
     parser.add_argument(

@@ -19,8 +19,8 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 # Extra Tools
-from convert_diffusers_to_original_stable_diffusion import convert
-from prune import prune
+from scripts.convert_diffusers_to_original_stable_diffusion import convert
+from scripts.prune import prune
 
 def parse_training_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")

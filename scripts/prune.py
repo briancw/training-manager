@@ -24,7 +24,7 @@ def parse_args():
     return args
 
 
-def prune(p, keep_only_ema=False, overwrite=False):
+def prune(p, overwrite=False):
     size_initial = os.path.getsize(p)
     nsd = dict()
     sd = torch.load(p, map_location="cpu")
@@ -46,4 +46,4 @@ def prune(p, keep_only_ema=False, overwrite=False):
 
 if __name__ == "__main__":
     args = parse_args()
-    prune_it(args.model, args.overwrite)
+    prune(args.model, args.overwrite)

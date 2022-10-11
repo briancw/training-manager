@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import shutil
 import torch
 
 # =================#
@@ -220,14 +221,15 @@ def convert(input_path, output_path, do_half=False, remove_original=False):
 
     # Remove the original
     if remove_original:
-        os.rmdir(input_path)
+        shutil.rmtree(input_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", default=None, type=str, required=True, help="Path to the model to convert.")
     parser.add_argument("--checkpoint_path", default=None, type=str, required=True, help="Path to the output model.")
     parser.add_argument("--half", action="store_true", help="Save weights in half precision.")
+    parser.add_argument("--remove_original", default=False, action="store_true", help="Delete the original model after conversion.")
     args = parser.parse_args()
     assert args.model_path is not None, "Must provide a model path!"
     assert args.checkpoint_path is not None, "Must provide a checkpoint path!"
-    convert(args.model_path, args.checkpoint_path, args.do_half)
+    convert(args.model_path, args.checkpoint_path, args.do_half, args.remove_original)

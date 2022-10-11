@@ -34,8 +34,22 @@ def run():
                 if param_value is not None:
                     training_arg_array.append(str(param_value))
 
-            # Run training
             training_args = parse_training_args(training_arg_array)
+            
+            # Validate some options
+            if not Path(training_args.output_dir).is_dir():
+                print('output directory path is not valid')
+                return
+
+            if training_args.convert_to_ckpt:
+                if training_args.output_ckpt_path is None:
+                    print('output_ckpt_path must be specified when using convert_to_ckpt')
+                    return
+                if not Path(training_args.output_ckpt_path).is_dir():
+                    print('ckpt output directory path is not valid')
+                    return
+            
+            # Run training
             train(training_args)
             
 if __name__ == "__main__":

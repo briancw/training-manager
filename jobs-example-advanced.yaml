@@ -18,8 +18,9 @@ jobs:
             lr_scheduler: constant
             lr_warmup_steps: 0
             sample_batch_size: 4
-            num_train_epochs: 5
-            save_each_epoch: 1
+            num_train_epochs: 10
+            save_each_epoch: 2
+            min_save_epoch: 4
             use_8bit_adam:
             with_prior_preservation:
             prior_loss_weight: 1

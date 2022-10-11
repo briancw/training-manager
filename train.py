@@ -175,6 +175,12 @@ def parse_training_args(input_args=None):
         help="Generate an output for every n epochs",
     )
     parser.add_argument(
+        "--min_save_epoch",
+        type=int,
+        default=1,
+        help="Only start outputting files past epoch n",
+    )
+    parser.add_argument(
         "--convert_to_ckpt",
         action="store_true",
         default=False,
@@ -533,23 +539,24 @@ def train(args):
         accelerator.wait_for_everyone()
 
         # TODO move saving into function to reduce code duplication
-        # Save a new checkpoint every n epochs
-        if (args.save_each_epoch) and (epoch % args.save_each_epoch == 0) and (epoch != 0) and (epoch != args.num_train_epochs):
-            epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch)
-            # I am COMPLETELY guessing at this. Hope this works.
-            pipeline = StableDiffusionPipeline.from_pretrained(
-                args.model_path,
-                unet=accelerator.unwrap_model(unet)
-            )
-            print("Saving model epoch to: " + epoch_path)
-            pipeline.save_pretrained(epoch_path)
+        # Save an output every n epochs, past the minimum, and skip on the final
+        if (args.save_each_epoch):
+            if (epoch >= args.min_save_epoch) and (epoch % args.save_each_epoch == 0) and (epoch != args.num_train_epochs):
+                epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch)
+                # I am COMPLETELY guessing at this. Hope this works.
+                pipeline = StableDiffusionPipeline.from_pretrained(
+                    args.model_path,
+                    unet=accelerator.unwrap_model(unet)
+                )
+                print("Saving model epoch to: " + epoch_path)
+                pipeline.save_pretrained(epoch_path)
 
-            if args.convert_to_ckpt is not None:
-                ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch) + ".ckpt"
-                print("Convert to .ckpt: " + ckpt_path)
-                convert(epoch_path, ckpt_path)
-                if args.prune is not None:
-                    prune(ckpt_path, True)
+                if args.convert_to_ckpt is not None:
+                    ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch) + ".ckpt"
+                    print("Convert to .ckpt: " + ckpt_path)
+                    convert(epoch_path, ckpt_path)
+                    if args.prune is not None:
+                        prune(ckpt_path, True)
                 
 
     # Create the pipeline using using the trained modules and save it.

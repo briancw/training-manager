@@ -554,7 +554,7 @@ def train(args):
                 if args.convert_to_ckpt is not None:
                     ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch) + ".ckpt"
                     print("Convert to .ckpt: " + ckpt_path)
-                    convert(epoch_path, ckpt_path)
+                    convert(epoch_path, ckpt_path, False, args.ckpt_only)
                     if args.prune is not None:
                         prune(ckpt_path, True)
                 
@@ -575,7 +575,7 @@ def train(args):
         if args.convert_to_ckpt is not None:
             ckpt_path = args.output_ckpt_path + "/" + args.output_name + ".ckpt"
             print("Convert to .ckpt: " + ckpt_path)
-            convert(final_dir, ckpt_path, False, args.ckpt_only)
+            convert(final_dir, ckpt_path)
             if args.prune is not None:
                 prune(ckpt_path, True)
 

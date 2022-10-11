@@ -1,5 +1,5 @@
 jobs:
-    run1:
+    job1:
         train_config:
             output_name: test
             instance_prompt: "xyz person"
@@ -23,3 +23,5 @@ jobs:
             use_8bit_adam:
             with_prior_preservation:
             prior_loss_weight: 1
+            prune:
+            convert_to_ckpt:

@@ -1,7 +1,7 @@
 import yaml
 import argparse
 from pathlib import Path
-from scripts.train import train, parse_training_args
+from train import train, parse_training_args
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Dreambooth Training Manager")

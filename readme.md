@@ -1,44 +1,44 @@
 # Dreambooth Training Manager
-## Install
+This is a simple manager to automate running dreambooth training from yaml config files.
+
+## Installation
 ```bash
 git clone https://github.com/briancw/training-manager
 cd training-manager
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-# Optionally install xformers
+```
+Optionally install xformers. It will likely take a while to compile. You may need to install build dependencies first.
+```bash
 pip install git+https://github.com/facebookresearch/xformers#egg=xformers
 ```
 
 ## Running
-The script will use jobs.yml by default, or you can specify one with --config
 ```
 source venv/bin/activate
 python manager.py --config my-job.yml
 ```
-You can get all of the training configuration options with:
+
+"jobs.yml" will be used by default, or you can use a specific file with --config.<br>
+
+All configuration options can be viewed with:
 ```
 python train.py -h
 ```
 
-### Save epochs during training
-Add "save_each_epoch: n" to your jobs yaml configuration to save out a model every n epochs.<br>
+Training is based on Diffuers dreambooth, so you will need to supply a diffuers model. There is a simple script in the scripts folder to convert an existing ckpt model to diffuers.
 
 ### Rare Token Generator
 Use the generate_tokens.py script to find a rare 3 character token to use in your instance prompt when training.<br>
 The script will work with diffusers style models and **not** .ckpt files.
 ```bash
-python generate_tokens.py --model_path /some/path/to/your/model
+python scipts/generate_tokens.py --model_path /some/path/to/your/model
 ```
 
 ### Substantial memory reduction (Credit ShivamShirao)
-Using [Bitsandbytes](https://github.com/TimDettmers/bitsandbytes) amd [xformers](https://github.com/facebookresearch/xformers) will result in a substantial memory reduction. See [ShivamShrirao's repo](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) for more details.
-
-### Arch Linux Bitsandbytes
-At least for me, when running on Arch, I need to manually specify LD_LIBRARY_PATH for bitsandbytes in my run script
-```
-LD_LIBRARY_PATH=/opt/cuda/targets/x86_64-linux/lib/
-```
+Using the flag use_8bit_adam with [Bitsandbytes](https://github.com/TimDettmers/bitsandbytes) and [xformers](https://github.com/facebookresearch/xformers) will result in a substantial memory reduction. See [ShivamShrirao's repo](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) for more details.<br>
+In order to get use_8bit_adam working on Arch linux, I needed to manually add "/opt/cuda/targets/x86_64-linux/lib/" to my LD_LIBRARY_PATH.<br>
 
 ## Credits
 - Based on [Victarry's](https://github.com/ShivamShrirao/diffusers/tree/main/examples/dreambooth) Dreambooth implementations

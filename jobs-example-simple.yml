@@ -1,0 +1,12 @@
+jobs:
+    job1:
+        train_config:
+            output_name: test
+            instance_prompt: xyz person
+            output_dir: /path-to-folder-where-diffusers-models-will-be-saved
+            instance_data_dir: /path-to-your-training-images
+            model_path: /path-to-input-model
+            seed: 80085
+            train_batch_size: 1
+            lr_warmup_steps: 0
+            num_train_epochs: 5

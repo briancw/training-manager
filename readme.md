@@ -33,7 +33,7 @@ Training is based on Diffuers dreambooth, so you will need to supply a diffuers 
 Use the generate_tokens.py script to find a rare 3 character token to use in your instance prompt when training.<br>
 The script will work with diffusers style models and **not** .ckpt files.
 ```bash
-python scipts/generate_tokens.py --model_path /some/path/to/your/model
+python scripts/generate_tokens.py --model_path /some/path/to/your/model
 ```
 
 ### Substantial memory reduction (Credit ShivamShirao)

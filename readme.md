@@ -15,19 +15,38 @@ pip install git+https://github.com/facebookresearch/xformers#egg=xformers
 ```
 
 ## Running
-```
+```bash
 source venv/bin/activate
 python manager.py --config my-job.yml
 ```
+Refer to the jobs-example-simple.yml and jobs-example-advanced.yml for project setup and configuration options.
 
-"jobs.yml" will be used by default, or you can use a specific file with --config.<br>
+#### training_model
+The base model used to train with should be inside your diffusers models folder. This needs to be a diffusers style model, not a .ckpt file. You can convert a ckpt model to a diffusers model using the script from the scripts folder in this repo.
 
-All configuration options can be viewed with:
+#### output_name
+Outputs will generated in your diffusers model folder using the name specified in "output_name".
+
+#### class_images and training_images
+These should refer to folders inside your specified training_images_path and class_images_path.
+
+#### train_config
+You can get all of the available options for the "train_config" section with:
 ```
 python train.py -h
 ```
 
-Training is based on Diffuers dreambooth, so you will need to supply a diffuers model. There is a simple script in the scripts folder to convert an existing ckpt model to diffuers.
+#### save_every_n_steps
+This projects adds an option to generate a model file every n steps. Previously epochs were used, but epochs are pretty ambigious so now steps are used instead.
+
+<!-- #### min_save_step -->
+
+It is possible to pass paths directly to train_config, but this setup is designed to automatically generate paths in order to handle automatic conversion and pruning.
+
+#### post_config
+- "convert_to_ckpt" will convert models to .ckpt format and place them in "ckpt_models_path"
+- "prune" will prune down generated .ckpt models. Typically this results in a 50% file size reduction.
+- "ckpt_only" will remove the diffusers style model after converting.
 
 ### Rare Token Generator
 Use the generate_tokens.py script to find a rare 3 character token to use in your instance prompt when training.<br>

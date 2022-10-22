@@ -1,28 +1,36 @@
+paths:
+    diffusers_models_path: /mnt/sd/diffusers-models
+    ckpt_models_path: /mnt/sd/ckpt-models
+    training_images_path: /mnt/sd/training-images
+    class_images_path: /mnt/sd/class-images
+
 jobs:
     job1:
+        job_paths:
+            training_model: sd-v1-4
+            output_name: test-advanced
+            class_images: test-10
+            training_images: 1-img-test
         train_config:
-            output_name: test
-            instance_prompt: "xyz person"
+            instance_prompt: "sÃ© person"
             class_prompt: "person"
-            output_dir: /path-to-save-new-model
-            instance_data_dir: /path-to-your-training-images
-            class_data_dir: /path-to-your-class-images
             num_class_images: 10
-            model_path: /path-to-your-model
+            max_train_steps: 20
+            save_every_n_steps: 5
+            min_save_step: 10
+            train_text_encoder:
             gradient_accumulation_steps: 1
             mixed_precision: fp16
             seed: 80085
-            resolution: 512
-            train_batch_size: 1
-            learning_rate: 5e-6
-            lr_scheduler: constant
+            train_batch_size: 2
+            learning_rate: 2e-6
             lr_warmup_steps: 0
             sample_batch_size: 4
-            num_train_epochs: 10
-            save_each_epoch: 2
-            min_save_epoch: 4
             use_8bit_adam:
             with_prior_preservation:
             prior_loss_weight: 1
-            prune:
-            convert_to_ckpt:
+            gradient_checkpointing:
+        post_config:
+            convert_to_ckpt: true
+            prune: true
+            ckpt_only: true

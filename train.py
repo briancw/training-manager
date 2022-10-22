@@ -1,8 +1,11 @@
 import argparse
+import itertools
 import math
 import os
 from pathlib import Path
 from typing import Optional
+from contextlib import nullcontext
+from diffusers.pipelines.stable_diffusion import safety_checker
 
 import torch
 import torch.nn.functional as F
@@ -10,32 +13,33 @@ import torch.utils.checkpoint
 from torch.utils.data import Dataset
 
 from accelerate import Accelerator
+from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
+from huggingface_hub import HfFolder, Repository, whoami
 from PIL import Image
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-# Extra Tools
-from scripts.convert_diffusers_to_original_stable_diffusion import convert
-from scripts.prune import prune
 
-def parse_training_args(input_args=None):
+logger = get_logger(__name__)
+
+def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
-        "--output_name",
-        type=str,
-        required=True,
-        help="Name of the newly created model",
-    )
-    parser.add_argument(
-        "--model_path",
+        "--pretrained_model_name_or_path",
         type=str,
         default=None,
         required=True,
-        help="Path to pretrained model",
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default=None,
+        help="Pretrained tokenizer name or path if not the same as model_name",
     )
     parser.add_argument(
         "--instance_data_dir",
@@ -75,7 +79,7 @@ def parse_training_args(input_args=None):
         type=int,
         default=100,
         help=(
-            "Minimal class images for prior perversation loss. If not have enough images, additional images will be"
+            "Minimal class images for prior preservation loss. If not have enough images, additional images will be"
             " sampled with class_prompt."
         ),
     )
@@ -98,6 +102,7 @@ def parse_training_args(input_args=None):
     parser.add_argument(
         "--center_crop", action="store_true", help="Whether to center crop images before resizing to resolution"
     )
+    parser.add_argument("--train_text_encoder", action="store_true", help="Whether to train the text encoder")
     parser.add_argument(
         "--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader."
     )
@@ -154,6 +159,23 @@ def parse_training_args(input_args=None):
     parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
     parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--hub_model_id",
+        type=str,
+        default=None,
+        help="The name of the repository to keep in sync with the local `output_dir`.",
+    )
+    parser.add_argument(
+        "--logging_dir",
+        type=str,
+        default="logs",
+        help=(
+            "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
+            " *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***."
+        ),
+    )
     parser.add_argument("--log_interval", type=int, default=10, help="Log every N steps.")
     parser.add_argument(
         "--mixed_precision",
@@ -169,39 +191,15 @@ def parse_training_args(input_args=None):
     parser.add_argument("--not_cache_latents", action="store_true", help="Do not precompute and cache latents from VAE.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument(
-        "--save_each_epoch",
+        "--save_every_n_steps",
         type=int,
         default=None,
-        help="Generate an output for every n epochs",
     )
     parser.add_argument(
-        "--min_save_epoch",
+        "--min_save_step",
         type=int,
-        default=1,
-        help="Only start outputting files past epoch n",
+        default=0,
     )
-    parser.add_argument(
-        "--convert_to_ckpt",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--output_ckpt_path",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--ckpt_only",
-        default=False,
-        action="store_true",
-        help="Delete diffusers models and only keep ckpt files"
-    )
-    parser.add_argument(
-        "--prune",
-        action="store_true",
-        default=False,
-    )
-
     if input_args is not None:
         args = parser.parse_args(input_args)
     else:
@@ -301,6 +299,24 @@ class DreamBoothDataset(Dataset):
 
         return example
 
+
+class PromptDataset(Dataset):
+    "A simple dataset to prepare the prompts to generate class images on multiple GPUs."
+
+    def __init__(self, prompt, num_samples):
+        self.prompt = prompt
+        self.num_samples = num_samples
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, index):
+        example = {}
+        example["prompt"] = self.prompt
+        example["index"] = index
+        return example
+
+
 class LatentsDataset(Dataset):
     def __init__(self, latents_cache, text_encoder_cache):
         self.latents_cache = latents_cache
@@ -311,6 +327,7 @@ class LatentsDataset(Dataset):
 
     def __getitem__(self, index):
         return self.latents_cache[index], self.text_encoder_cache[index]
+
 
 class AverageMeter:
     def __init__(self, name=None):
@@ -325,25 +342,110 @@ class AverageMeter:
         self.count += n
         self.avg = self.sum / self.count
 
-def train(args):
+
+def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
+    if token is None:
+        token = HfFolder.get_token()
+    if organization is None:
+        username = whoami(token)["name"]
+        return f"{username}/{model_id}"
+    else:
+        return f"{organization}/{model_id}"
+
+
+def main(args):
+    logging_dir = Path(args.output_dir, args.logging_dir)
+
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
+        log_with="tensorboard",
+        logging_dir=logging_dir,
     )
+
+    # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
+    # This will be enabled soon in accelerate. For now, we don't allow gradient accumulation when training two models.
+    # TODO (patil-suraj): Remove this check when gradient accumulation with two models is enabled in accelerate.
+    if args.train_text_encoder and args.gradient_accumulation_steps > 1 and accelerator.num_processes > 1:
+        raise ValueError(
+            "Gradient accumulation is not supported when training the text encoder in distributed training. "
+            "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
+        )
 
     if args.seed is not None:
         set_seed(args.seed)
 
+    if args.with_prior_preservation:
+        class_images_dir = Path(args.class_data_dir)
+        if not class_images_dir.exists():
+            class_images_dir.mkdir(parents=True)
+        cur_class_images = len(list(class_images_dir.iterdir()))
+
+        if cur_class_images < args.num_class_images:
+            torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path, torch_dtype=torch_dtype, use_auth_token=True
+            )
+            pipeline.set_progress_bar_config(disable=True)
+
+            num_new_images = args.num_class_images - cur_class_images
+            logger.info(f"Number of class images to sample: {num_new_images}.")
+
+            sample_dataset = PromptDataset(args.class_prompt, num_new_images)
+            sample_dataloader = torch.utils.data.DataLoader(sample_dataset, batch_size=args.sample_batch_size)
+
+            sample_dataloader = accelerator.prepare(sample_dataloader)
+            pipeline.to(accelerator.device)
+
+            with torch.autocast("cuda"), torch.inference_mode():
+                for example in tqdm(
+                    sample_dataloader, desc="Generating class images", disable=not accelerator.is_local_main_process
+                ):
+                    images = pipeline(example["prompt"]).images
+
+                    for i, image in enumerate(images):
+                        image.save(class_images_dir / f"{example['index'][i] + cur_class_images}.jpg")
+
+            del pipeline
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            if args.hub_model_id is None:
+                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            else:
+                repo_name = args.hub_model_id
+            repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
+
     # Load the tokenizer
-    tokenizer = CLIPTokenizer.from_pretrained(args.model_path, subfolder="tokenizer")
+    if args.tokenizer_name:
+        tokenizer = CLIPTokenizer.from_pretrained(args.tokenizer_name)
+    elif args.pretrained_model_name_or_path:
+        tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer", use_auth_token=True)
 
     # Load models and create wrapper for stable diffusion
-    text_encoder = CLIPTextModel.from_pretrained(args.model_path, subfolder="text_encoder")
-    vae = AutoencoderKL.from_pretrained(args.model_path, subfolder="vae")
-    unet = UNet2DConditionModel.from_pretrained(args.model_path, subfolder="unet")
+    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder", use_auth_token=True)
+    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", use_auth_token=True)
+    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet", use_auth_token=True)
+
+    vae.requires_grad_(False)
+    if not args.train_text_encoder:
+        text_encoder.requires_grad_(False)
 
     if args.gradient_checkpointing:
         unet.enable_gradient_checkpointing()
+        if args.train_text_encoder:
+            text_encoder.gradient_checkpointing_enable()
 
     if args.scale_lr:
         args.learning_rate = (
@@ -363,8 +465,11 @@ def train(args):
     else:
         optimizer_class = torch.optim.AdamW
 
+    params_to_optimize = (
+        itertools.chain(unet.parameters(), text_encoder.parameters()) if args.train_text_encoder else unet.parameters()
+    )
     optimizer = optimizer_class(
-        unet.parameters(),  # only optimize unet
+        params_to_optimize,
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
@@ -410,23 +515,37 @@ def train(args):
         train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=collate_fn, pin_memory=True
     )
 
-    # Move text_encode and vae to gpu
-    text_encoder.to(accelerator.device)
-    vae.to(accelerator.device)
+    weight_dtype = torch.float32
+    if args.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif args.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+
+    # Move text_encode and vae to gpu.
+    # For mixed precision training we cast the text_encoder and vae weights to half-precision
+    # as these models are only used for inference, keeping weights in full precision is not required.
+    vae.to(accelerator.device, dtype=weight_dtype)
+    if not args.train_text_encoder:
+        text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     if not args.not_cache_latents:
         latents_cache = []
         text_encoder_cache = []
         for batch in tqdm(train_dataloader, desc="Caching latents"):
             with torch.no_grad():
-                batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True)
+                batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
                 batch["input_ids"] = batch["input_ids"].to(accelerator.device, non_blocking=True)
                 latents_cache.append(vae.encode(batch["pixel_values"]).latent_dist)
-                text_encoder_cache.append(text_encoder(batch["input_ids"])[0])
+                if args.train_text_encoder:
+                    text_encoder_cache.append(batch["input_ids"])
+                else:
+                    text_encoder_cache.append(text_encoder(batch["input_ids"])[0])
         train_dataset = LatentsDataset(latents_cache, text_encoder_cache)
         train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=True)
 
-        del vae, text_encoder
+        del vae
+        if not args.train_text_encoder:
+            del text_encoder
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -444,9 +563,14 @@ def train(args):
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
-    )
+    if args.train_text_encoder:
+        unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, text_encoder, optimizer, train_dataloader, lr_scheduler
+        )
+    else:
+        unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, optimizer, train_dataloader, lr_scheduler
+        )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -463,11 +587,20 @@ def train(args):
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num batches each epoch = {len(train_dataloader)}")
+    logger.info(f"  Num Epochs = {args.num_train_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
     global_step = 0
     loss_avg = AverageMeter()
+    text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
     for epoch in range(args.num_train_epochs):
         unet.train()
         for step, batch in enumerate(train_dataloader):
@@ -477,11 +610,11 @@ def train(args):
                     if not args.not_cache_latents:
                         latent_dist = batch[0][0]
                     else:
-                        latent_dist = vae.encode(batch["pixel_values"]).latent_dist
+                        latent_dist = vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist
                     latents = latent_dist.sample() * 0.18215
 
                 # Sample noise that we'll add to the latents
-                noise = torch.randn(latents.shape).to(latents.device)
+                noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
                 # Sample a random timestep for each image
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
@@ -492,9 +625,12 @@ def train(args):
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                 # Get the text embedding for conditioning
-                with torch.no_grad():
+                with text_enc_context:
                     if not args.not_cache_latents:
-                        encoder_hidden_states = batch[0][1]
+                        if args.train_text_encoder:
+                            encoder_hidden_states = text_encoder(batch[0][1])[0]
+                        else:
+                            encoder_hidden_states = batch[0][1]
                     else:
                         encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
@@ -507,19 +643,24 @@ def train(args):
                     noise, noise_prior = torch.chunk(noise, 2, dim=0)
 
                     # Compute instance loss
-                    loss = F.mse_loss(noise_pred, noise, reduction="none").mean([1, 2, 3]).mean()
+                    loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="none").mean([1, 2, 3]).mean()
 
                     # Compute prior loss
-                    prior_loss = F.mse_loss(noise_pred_prior, noise_prior, reduction="none").mean([1, 2, 3]).mean()
+                    prior_loss = F.mse_loss(noise_pred_prior.float(), noise_prior.float(), reduction="mean")
 
                     # Add the prior loss to the instance loss.
                     loss = loss + args.prior_loss_weight * prior_loss
                 else:
-                    loss = F.mse_loss(noise_pred, noise, reduction="none").mean([1, 2, 3]).mean()
+                    loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
 
                 accelerator.backward(loss)
-                if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
+                # if accelerator.sync_gradients:
+                #     params_to_clip = (
+                #         itertools.chain(unet.parameters(), text_encoder.parameters())
+                #         if args.train_text_encoder
+                #         else unet.parameters()
+                #     )
+                #     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
@@ -536,54 +677,58 @@ def train(args):
             if global_step >= args.max_train_steps:
                 break
 
+            # TODO: Need to check against trailing slash in output dir
+            if (args.save_every_n_steps):
+                min_step = args.min_save_step if args.min_save_step is not None else 0
+                if (global_step % args.save_every_n_steps == 0) and (global_step >= min_step):
+                    interval_save_path = args.output_dir + "_step" + str(global_step)
+                    if args.train_text_encoder:
+                        pipeline = StableDiffusionPipeline.from_pretrained(
+                            args.pretrained_model_name_or_path,
+                            unet=accelerator.unwrap_model(unet),
+                            text_encoder=accelerator.unwrap_model(text_encoder),
+                            use_auth_token=True
+                        )
+                    else:
+                        pipeline = StableDiffusionPipeline.from_pretrained(
+                            args.pretrained_model_name_or_path,
+                            unet=accelerator.unwrap_model(unet),
+                            use_auth_token=True
+                        )
+                    print("Saving model to: " + interval_save_path)
+                    pipeline.save_pretrained(interval_save_path)
+
         accelerator.wait_for_everyone()
-
-        # TODO move saving into function to reduce code duplication
-        # Save an output every n epochs, past the minimum, and skip on the final
-        if (args.save_each_epoch):
-            if ((epoch + 1) >= args.min_save_epoch) and ((epoch + 1) % args.save_each_epoch == 0) and ((epoch + 1) != args.num_train_epochs):
-                epoch_path = args.output_dir + "/" + args.output_name + "_epoch" + str(epoch + 1)
-                pipeline = StableDiffusionPipeline.from_pretrained(
-                    args.model_path,
-                    unet=accelerator.unwrap_model(unet)
-                )
-                print("Saving model epoch to: " + epoch_path)
-                pipeline.save_pretrained(epoch_path)
-
-                if args.convert_to_ckpt is not None:
-                    ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch + 1) + ".ckpt"
-                    print("Convert to .ckpt: " + ckpt_path)
-                    convert(epoch_path, ckpt_path, False, args.ckpt_only)
-                    if args.prune is not None:
-                        prune(ckpt_path, True)
-                
 
     # Create the pipeline using using the trained modules and save it.
     if accelerator.is_main_process:
-        pipeline = StableDiffusionPipeline.from_pretrained(
-            args.model_path,
-            unet=accelerator.unwrap_model(unet)
-        )
-        final_dir = args.output_dir + "/" + args.output_name
-        if (args.save_each_epoch):
-            final_dir += "_epoch" + str(epoch + 1)
+        if args.train_text_encoder:
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                unet=accelerator.unwrap_model(unet),
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                use_auth_token=True
+            )
+        else:
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                args.pretrained_model_name_or_path,
+                unet=accelerator.unwrap_model(unet),
+                use_auth_token=True
+            )
         
-        print("Saving model to: " + final_dir)
-        pipeline.save_pretrained(final_dir)
+        save_path = args.output_dir
+        if (args.save_every_n_steps):
+            save_path = args.output_dir + "_step" + str(global_step)
+        
+        print("Sacing model to: " + save_path)
+        pipeline.save_pretrained(save_path)
 
-        if args.convert_to_ckpt is not None:
-            ckpt_path = args.output_ckpt_path + "/" + args.output_name + ".ckpt"
-            if (args.save_each_epoch):
-                ckpt_path = args.output_ckpt_path + "/" + args.output_name + "_epoch" + str(epoch + 1) + ".ckpt"
-            
-            print("Convert to .ckpt: " + ckpt_path)
-            convert(final_dir, ckpt_path)
-            if args.prune is not None:
-                prune(ckpt_path, True)
+        if args.push_to_hub:
+            repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
 
     accelerator.end_training()
 
 
 if __name__ == "__main__":
-    args = parse_training_args()
-    train(args)
+    args = parse_args()
+    main(args)

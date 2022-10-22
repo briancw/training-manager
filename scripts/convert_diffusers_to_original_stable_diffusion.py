@@ -221,6 +221,7 @@ def convert(input_path, output_path, do_half=False, remove_original=False):
 
     # Remove the original
     if remove_original:
+        print("Removing original model:" + str(input_path))
         shutil.rmtree(input_path)
 
 if __name__ == "__main__":

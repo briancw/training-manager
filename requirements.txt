@@ -4,5 +4,6 @@ torch
 torchvision
 transformers>=4.21.0
 ftfy
+tensorboard
 bitsandbytes
 --extra-index-url https://download.pytorch.org/whl/cu116

@@ -1,12 +1,21 @@
+paths:
+    diffusers_models_path: /mnt/sd/diffusers-models
+    ckpt_models_path: /mnt/sd/ckpt-models
+    training_images_path: /mnt/sd/training-images
+
 jobs:
     job1:
+        job_paths:
+            training_model: sd-v1-4
+            output_name: test-simple
+            training_images: 1-img-test
         train_config:
-            output_name: test
-            instance_prompt: xyz person
-            output_dir: /path-to-folder-where-diffusers-models-will-be-saved
-            instance_data_dir: /path-to-your-training-images
-            model_path: /path-to-input-model
+            instance_prompt: "sÃ© person"
+            mixed_precision: fp16
             seed: 80085
             train_batch_size: 1
-            lr_warmup_steps: 0
-            num_train_epochs: 5
+            max_train_steps: 25
+        post_config:
+            convert_to_ckpt: true
+            ckpt_only: true
+            prune: true

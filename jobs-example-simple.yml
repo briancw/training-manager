@@ -6,9 +6,9 @@ paths:
 jobs:
     job1:
         job_paths:
-            training_model: sd-v1-4
-            output_name: test-simple
-            training_images: 1-img-test
+            output_name: test-simple    # Name of the model to be output into your diffusers model path
+            training_model: sd-v1-4     # A diffusers model which is located in your diffusers model path
+            training_images: 1-img-test # Name of a folder inside your training_images_path
         train_config:
             instance_prompt: "sÃ© person"
             mixed_precision: fp16
@@ -16,6 +16,6 @@ jobs:
             train_batch_size: 1
             max_train_steps: 25
         post_config:
-            convert_to_ckpt: true
-            ckpt_only: true
-            prune: true
+            convert_to_ckpt: true       # Convert from diffusers model into a ckpt file
+            ckpt_only: true             # Delete the diffusers model after conversion
+            prune: true                 # Prune the created ckpt model

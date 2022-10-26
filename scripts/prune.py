@@ -41,7 +41,6 @@ def prune(p, overwrite=False):
     if overwrite:
         fn = p
 
-    print(f"Saving pruned checkpoint at: {fn}")
     torch.save(nsd, fn)
 
 if __name__ == "__main__":

@@ -84,7 +84,7 @@ def run():
                             ckpt_name = job_config['job_paths']['output_name'] + "_step" + f.name + ".ckpt"
                             ckpt_path = os.path.join(config['paths']['ckpt_models_path'], ckpt_name)
                             print('Converting: ' + f.path)
-                            # convert(f.path, ckpt_path)
+                            convert(f.path, ckpt_path)
 
                             if ckpt_only:
                                 # Remove the original

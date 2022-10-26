@@ -7,7 +7,7 @@ paths:
 jobs:
     job1:
         job_paths:
-            output_name: test-advanced   # Name of the model to be output into your diffusers model path
+            output_name: test-advanced   # Name of the model which will be used for output diffusers models and ckpt models
             training_model: sd-v1-4      # A diffusers model which is located in your diffusers model path
             training_images: 1-img-test  # Name of a folder inside your training_images_path
             class_images: test-10        # Name of a folder inside your class_images_path

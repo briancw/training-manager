@@ -1,4 +1,4 @@
-git+https://github.com/ShivamShrirao/diffusers.git
+git+https://github.com/HuggingFace/diffusers.git
 accelerate==0.12.0
 torch
 torchvision
@@ -6,4 +6,3 @@ transformers>=4.21.0
 ftfy
 tensorboard
 bitsandbytes
---extra-index-url https://download.pytorch.org/whl/cu116

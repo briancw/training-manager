@@ -13,6 +13,7 @@ from scripts.prune import prune
 def parse_manager_args():
     parser = argparse.ArgumentParser(description="Dreambooth Training Manager")
     parser.add_argument(
+        "-c",
         "--config",
         type=str,
         default="./jobs.yml",
